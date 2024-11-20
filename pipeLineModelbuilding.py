@@ -1,11 +1,10 @@
 '''
 
-1.通过pipeline创建模型
-2，pipeline包含了数据清洗，数据划分，模型划分权重，集成模型，然后输出预测结果
-3.输出了集成模型的信息等
-4.通过for 循环不停的找到符合MAE MRE的模型，这也是一种方法。
-5.准备自动化过程
-
+1. Create a model through a pipeline
+2. The pipeline includes data cleaning, data partitioning, model partitioning weights, integrated models, and then outputs prediction results
+3. Output information about the integrated model, etc
+4. Continuously finding models that comply with MAE MRE through a for loop is also a method.
+5. Prepare for automation process
 '''
 from hypergbm import make_experiment
 from sklearn.model_selection import train_test_split
@@ -47,24 +46,24 @@ from hypergbm import make_experiment
 from tqdm import tqdm
 
 from IPython.display import HTML
-plt.rcParams['font.sans-serif'] = ['SimHei']  # 设置字体为SimHei
-plt.rcParams['axes.unicode_minus'] = False  # 设置支持负号
+plt.rcParams['font.sans-serif'] = ['SimHei']  
+plt.rcParams['axes.unicode_minus'] = False  
 start_time = time.time()
 
 data = pd.read_excel(r"D:\工艺参数论文\工艺参数-材料成分0.01-铸型尺寸.xlsx",   #import data
                      usecols=range(14))
-data.columns = data.columns.astype(str)  # 将列名转化为字符串
+data.columns = data.columns.astype(str)  
 
 
-# 划分输入特征和输出特征
+# split train data and test data
 X = data.iloc[:, 4:]
 y = data.iloc[:, 0]  #import
-print(y)
-# 划分训练集和测试集
+
+
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=45)
-# 合并X_train和y_train
+# squeeze all data
 train_data = pd.concat([X_train, y_train], axis=1)
-#如果是预测材料性能
+
 data_cleaner_args = {
     'correct_object_dtype': True,
     'drop_columns': None,
@@ -76,9 +75,9 @@ data_cleaner_args = {
     'reduce_mem_usage': False,
     'reserve_columns': None
 }
-# 定义自己的超参搜索空间
+# define your hyper parameters range
 my_space1=GeneralSearchSpaceGenerator(
-#是否打开全部GBM模型
+#choose model
 enable_xgb=True,
 enable_lightgbm=True,
 enable_catboost=True,
@@ -137,36 +136,36 @@ all_mae = pd.DataFrame()
 all_r2 = pd.DataFrame()
 time1 = pd.DataFrame()
 for i in tqdm(range(200), desc="Processing"):
-    # 使用hyperGBM找到最适合的模型
-    # searcher = ['evolution', 'mcts', 'random','moead', 'nsga2', 'rnsga2']   #不同的寻优组合算法
+    # find best model
+    # searcher = ['evolution', 'mcts', 'random','moead', 'nsga2', 'rnsga2']   #hyper paremeters searcher
     experiment = make_experiment(train_data, target=data.columns[0], reward_metric='rmse',
                                  data_cleaner_args=data_cleaner_args, searcher='random', search_space=my_space1)
     estimator = experiment.run()
-    # 保存模型
-    with open(f'pipeline_.pkl', 'wb') as f:  #                                    ######需要改
+    # save model
+    with open(f'pipeline_.pkl', 'wb') as f:  #                             
         pickle.dump(estimator, f)
-    # 输出模型
+    # output model
     print("Best model:", estimator)
-    # print("Best model parameters:", estimator.get_params()) #输出模型参数
-    # 获取测试集的预测值
+    # print("Best model parameters:", estimator.get_params()) #output model's hyper parameters
+    # get the pred data
     pd.set_option('display.max_rows', None)
     y_pred = estimator.predict(X_test)
-    #保存变量到文件
+    #save data
     with open(f'测试集-输入.pkl', 'wb') as f:
         pickle.dump(X_test, f)
     with open(f'测试集-输出.pkl', 'wb') as f:
         pickle.dump(y_test, f)
     with open(f'预测值.pkl', 'wb') as f:
         pickle.dump(y_pred, f)
-    # 计算测试集上的MAE
+    # caculate mae
     mae = mean_absolute_error(y_test, y_pred)
-    # 计算R^2
+    # caculate r2
     r2 = r2_score(y_test, y_pred)
-    # 计算RMSE
+    # caculate rmse
     rmse = sqrt(mean_squared_error(y_test, y_pred))
-    # 获取基模型
+    # get base model
     base_estimators = estimator.steps[-1][-1].estimators
-    # 输出每个基模型
+    # output each base model information
     best_model = None
     for i, base_estimator in enumerate(base_estimators):
         if base_estimator is not None:  # 忽略权重为0的基模型
@@ -175,20 +174,20 @@ for i in tqdm(range(200), desc="Processing"):
             base_model_ = base_estimator.model
             print(f"基模型{i}的参数:", model_params)
             print(f"基模型{i}:", base_model_)
-    # 绘制测试集的真实值和预测值
+  
     MRE = np.mean(np.abs((y_test.values - y_pred) / y_test.values))
     print("Test set MAE:", mae)
     print("Test set R^2:", r2)
     print("Test set RMSE:", rmse)
     print("Test set MRE:", MRE)
-    # 计算指标
+    # caculate metrics 
     metrics = {
         'mae': mean_absolute_error(y_test, y_pred),
         'MRE': np.mean(np.abs((y_test.values - y_pred) / y_test.values)),
         'r2': r2_score(y_test, y_pred),
         'rmse': sqrt(mean_squared_error(y_test, y_pred)),
     }
-    # 保存模型和指标
+    # save model and metrics
     with open(f'_pipeline_metrics.pkl', 'wb') as f:                                     
         pickle.dump((estimator, metrics), f)
     all_mae = pd.concat([all_mae, pd.Series([mae])])
@@ -200,7 +199,7 @@ for i in tqdm(range(200), desc="Processing"):
     print(all_MRE)
     print('R2列表')
     print(all_r2)
-    if mae <= 1 or r2 >= 0.2:            #设置循环终止指标。
+    if mae <= 1 or r2 >= 0.2:            
         break
     end_time = time.time()
     elapsed_time = end_time - start_time
